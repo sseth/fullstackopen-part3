@@ -4,8 +4,12 @@
   "description": "",
   "main": "index.js",
   "scripts": {
+    "deploy": "fly deploy",
     "start": "node index.js",
-    "dev": "nodemon index.js"
+    "dev": "nodemon index.js",
+    "deploy:backend": "fly deploy",
+    "predeploy": "npm run build:ui",
+    "build:ui": "rm -rf ./build && cd ../fullstackopen/part3/phonebook && npm run build"
   },
   "keywords": [],
   "author": "Shubhankar Seth",
