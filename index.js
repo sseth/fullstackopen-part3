@@ -1,12 +1,14 @@
-const express = require('express');
-const morgan = require('morgan');
+require('dotenv').config();
 
+const express = require('express');
+const { default: mongoose } = require('mongoose');
 const app = express();
 app.use(express.static('build'));
 app.use(express.json());
+
+const morgan = require('morgan');
 morgan.token('request-data', (req, res) => {
-  if (Object.keys(req.body).length)
-    return JSON.stringify(req.body);
+  if (Object.keys(req.body).length) return JSON.stringify(req.body);
 });
 app.use(
   morgan((tokens, req, res) => {
@@ -23,45 +25,26 @@ app.use(
   })
 );
 
-let data = [
-  {
-    id: 1,
-    name: 'Arto Hellas',
-    number: '040-123456',
-  },
-  {
-    id: 2,
-    name: 'Ada Lovelace',
-    number: '39-44-5323523',
-  },
-  {
-    id: 3,
-    name: 'Dan Abramov',
-    number: '12-43-234345',
-  },
-  {
-    id: 4,
-    name: 'Mary Poppendieck',
-    number: '39-23-6423122',
-  },
-];
+const Person = require('./models/person');
 
 app.get('/api', (req, res) => {
   res.send('Hello');
 });
 
 app.get('/api/info', (req, res) => {
-  const info = `Phonebook has info for ${data.length} ${
-    data.length === 1 ? 'person' : 'people'
-  }`;
-  res.send(
-    `<p>${info}</p>
-      <p>${Date()}</p>`
-  );
+  Person.find().then((persons) => {
+    const info = `Phonebook has info for ${persons.length} ${
+      persons.length === 1 ? 'person' : 'people'
+    }`;
+    res.send(
+      `<p>${info}</p>
+        <p>${Date()}</p>`
+    );
+  });
 });
 
 app.get('/api/persons', (req, res) => {
-  res.json(data);
+  Person.find().then((persons) => res.json(persons));
 });
 
 app.post('/api/persons', (req, res) => {
@@ -71,34 +54,43 @@ app.post('/api/persons', (req, res) => {
       error: 'name and number required',
     });
 
-  if (data.find((p) => p.name.toLowerCase() === name.toLowerCase()))
-    return res.status(400).json({
-      error: `'${name}' already exists`,
-    });
-
-  const id = Math.ceil(Math.random() * 10000);
-  const newEntry = { id, name, number };
-  data.push(newEntry);
-  res.status(201).json(newEntry);
+  Person.exists({ name: { $regex: name, $options: 'i' } })
+    .then((entry) => {
+      if (entry) {
+        return res.status(400).json({
+          error: `'${name}' already exists`,
+        });
+      }
+      const newEntry = new Person({ name, number });
+      newEntry.save().then((newPerson) => res.status(201).json(newPerson));
+    })
+    .catch((e) => console.error(e));
 });
 
 app.get('/api/persons/:id', (req, res) => {
-  const { id } = req.params;
-  const entry = data.find((p) => p.id === Number(id));
-  if (!entry)
-    return res.status(404).json({
-      error: `phonebook entry with id ${id} not found`,
-    });
-  res.json(entry);
+  Person.findById(req.params.id)
+    .then((person) => {
+      if (!person)
+        return res.status(404).json({
+          error: `phonebook entry with id ${id} not found`,
+        });
+      res.json(person);
+    })
+    .catch((e) => console.error(e));
 });
 
 app.delete('/api/persons/:id', (req, res) => {
-  const id = Number(req.params.id);
-  data = data.filter((p) => p.id !== id);
-  res.status(204).end();
+  Person.findByIdAndDelete(req.params.id)
+    .then((entry) => {
+      console.log(entry);
+      if (!entry)
+        return res.status(404).json({ error: `entry with id ${id} not found` });
+      res.status(204).end();
+    })
+    .catch((e) => console.error(e));
 });
 
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
-  console.log(`Listenting on port ${PORT}`);
+  setTimeout(() => console.log(`Listenting on port ${PORT}`), 1000);
 });
