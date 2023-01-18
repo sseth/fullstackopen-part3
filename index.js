@@ -1,7 +1,6 @@
 require('dotenv').config();
 
 const express = require('express');
-const { default: mongoose } = require('mongoose');
 const app = express();
 app.use(express.static('build'));
 app.use(express.json());
@@ -64,30 +63,50 @@ app.post('/api/persons', (req, res) => {
       const newEntry = new Person({ name, number });
       newEntry.save().then((newPerson) => res.status(201).json(newPerson));
     })
-    .catch((e) => console.error(e));
+    .catch((e) => next(e));
 });
 
 app.get('/api/persons/:id', (req, res) => {
   Person.findById(req.params.id)
     .then((person) => {
-      if (!person)
+      if (!person) {
         return res.status(404).json({
           error: `phonebook entry with id ${id} not found`,
         });
+      }
       res.json(person);
     })
-    .catch((e) => console.error(e));
+    .catch((e) => next(e));
 });
 
 app.delete('/api/persons/:id', (req, res) => {
   Person.findByIdAndDelete(req.params.id)
     .then((entry) => {
-      console.log(entry);
       if (!entry)
         return res.status(404).json({ error: `entry with id ${id} not found` });
       res.status(204).end();
     })
-    .catch((e) => console.error(e));
+    .catch((e) => next(e));
+});
+
+app.put('/api/persons/:id', (req, res) => {
+  const { name, number } = req.body;
+  Person.findByIdAndUpdate(req.params.id, { name, number }, { new: true })
+    .then((updated) => res.json(updated))
+    .catch((e) => next(e));
+});
+
+app.all('*', (req, res) => {
+  res.status(404).send({ error: `unknown endpoint: ${req.path}` });
+});
+
+app.use((error, req, res, next) => {
+  console.error(error.message);
+
+  if (error.name === 'CastError')
+    return res.status(400).send({ error: 'invalid id' });
+
+  next(error);
 });
 
 const PORT = process.env.PORT || 3001;
