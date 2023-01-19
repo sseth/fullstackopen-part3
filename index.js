@@ -6,7 +6,7 @@ app.use(express.static('build'));
 app.use(express.json());
 
 const morgan = require('morgan');
-morgan.token('request-data', (req, res) => {
+morgan.token('request-data', (req) => {
   if (Object.keys(req.body).length) return JSON.stringify(req.body);
 });
 app.use(
@@ -46,28 +46,18 @@ app.get('/api/persons', (req, res) => {
   Person.find().then((persons) => res.json(persons));
 });
 
-app.post('/api/persons', (req, res) => {
+app.post('/api/persons', (req, res, next) => {
   const { name, number } = req.body;
-  if (!name || !number)
-    return res.status(400).json({
-      error: 'name and number required',
-    });
-
-  Person.exists({ name: { $regex: name, $options: 'i' } })
-    .then((entry) => {
-      if (entry) {
-        return res.status(400).json({
-          error: `'${name}' already exists`,
-        });
-      }
-      const newEntry = new Person({ name, number });
-      newEntry.save().then((newPerson) => res.status(201).json(newPerson));
-    })
+  const newEntry = new Person({ name, number });
+  newEntry
+    .save()
+    .then((newPerson) => res.status(201).json(newPerson))
     .catch((e) => next(e));
 });
 
-app.get('/api/persons/:id', (req, res) => {
-  Person.findById(req.params.id)
+app.get('/api/persons/:id', (req, res, next) => {
+  const { id } = req.params;
+  Person.findById(id)
     .then((person) => {
       if (!person) {
         return res.status(404).json({
@@ -79,8 +69,9 @@ app.get('/api/persons/:id', (req, res) => {
     .catch((e) => next(e));
 });
 
-app.delete('/api/persons/:id', (req, res) => {
-  Person.findByIdAndDelete(req.params.id)
+app.delete('/api/persons/:id', (req, res, next) => {
+  const { id } = req.params;
+  Person.findByIdAndDelete(id)
     .then((entry) => {
       if (!entry)
         return res.status(404).json({ error: `entry with id ${id} not found` });
@@ -89,9 +80,13 @@ app.delete('/api/persons/:id', (req, res) => {
     .catch((e) => next(e));
 });
 
-app.put('/api/persons/:id', (req, res) => {
+app.put('/api/persons/:id', (req, res, next) => {
   const { name, number } = req.body;
-  Person.findByIdAndUpdate(req.params.id, { name, number }, { new: true })
+  Person.findByIdAndUpdate(
+    req.params.id,
+    { name, number },
+    { new: true, runValidators: true, context: 'query' }
+  )
     .then((updated) => res.json(updated))
     .catch((e) => next(e));
 });
@@ -106,10 +101,22 @@ app.use((error, req, res, next) => {
   if (error.name === 'CastError')
     return res.status(400).send({ error: 'invalid id' });
 
+  if (error.name === 'MongoServerError')
+    return res.status(400).json({ error: error.message });
+
+  if (error.name === 'ValidationError') {
+    const msg = error.message.slice(
+      error.message.startsWith('Person')
+        ? 'Person validation failed: '.length
+        : 'Validation failed: '.length
+    );
+    return res.status(400).json({ error: { type: 'validation', msg } });
+  }
+
   next(error);
 });
 
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
-  setTimeout(() => console.log(`Listenting on port ${PORT}`), 1000);
+  setTimeout(() => console.log(`Listening on port ${PORT}`), 1000);
 });
